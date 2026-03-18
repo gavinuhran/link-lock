@@ -67,7 +67,7 @@ struct HomeView: View {
             }
         }
         // Handle deep links from Share Extension.
-        .onChange(of: pendingURL) { _, newURL in
+        .onChange(of: pendingURL) { newURL in
             guard let url = newURL else { return }
             urlText = url.absoluteString
             targetURL = url
@@ -108,11 +108,19 @@ struct HistoryView: View {
     var body: some View {
         List {
             if store.entries.isEmpty {
-                ContentUnavailableView(
-                    "No sessions yet",
-                    systemImage: "clock",
-                    description: Text("Your session history will appear here.")
-                )
+                VStack(spacing: 12) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("No sessions yet")
+                        .font(.headline)
+                    Text("Your session history will appear here.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+                .listRowBackground(Color.clear)
             } else {
                 ForEach(store.entries) { entry in
                     HistoryRowView(entry: entry)

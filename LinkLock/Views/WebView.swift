@@ -50,7 +50,7 @@ struct WebView: UIViewRepresentable {
 
 extension WebView {
 
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
 
         weak var webView: WKWebView?
         private let session: SessionManager
@@ -151,7 +151,7 @@ extension WebView.Coordinator: WKNavigationDelegate {
         }
     }
 
-    func webView(_ webView: WKWebView, didCommitNavigation navigation: WKNavigation!) {
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         // First commit = final URL after all server-side redirects. Lock it.
         if session.isResolving, let url = webView.url {
             Task { @MainActor in
@@ -161,7 +161,7 @@ extension WebView.Coordinator: WKNavigationDelegate {
         }
     }
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
         // Navigation errors don't require special handling — the page just won't load.
         // Log for diagnostics.
         EventLogger.shared.log(
@@ -175,7 +175,7 @@ extension WebView.Coordinator: WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         didFailProvisionalNavigation navigation: WKNavigation!,
-        withError error: Error
+        withError error: any Error
     ) {
         EventLogger.shared.log(
             .sessionEnd,

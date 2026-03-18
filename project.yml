@@ -1,0 +1,72 @@
+name: LinkLock
+options:
+  bundleIdPrefix: com.gavinuhran
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+
+targets:
+  LinkLock:
+    type: application
+    platform: iOS
+    sources:
+      - path: LinkLock
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: true
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_CFBundleURLTypes:
+          - CFBundleURLSchemes: [linklock]
+            CFBundleURLName: com.gavinuhran.LinkLock
+    info:
+      path: LinkLock/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [linklock]
+            CFBundleURLName: com.gavinuhran.LinkLock
+
+  LinkLockTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: LinkLockTests
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: LinkLock
+
+  LinkLockShareExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: LinkLockShareExtension
+        excludes:
+          - "**/.DS_Store"
+    settings:
+      base:
+        INFOPLIST_KEY_NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule: "SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $att, ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO \"public.url\").@count == 1).@count == 1"
+    info:
+      path: LinkLockShareExtension/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule: "SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $att, ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO \"public.url\").@count == 1).@count == 1"
+    dependencies:
+      - target: LinkLock
