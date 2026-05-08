@@ -32,6 +32,8 @@ targets:
     info:
       path: LinkLock/Info.plist
       properties:
+        UILaunchScreen: {}
+        NSCameraUsageDescription: "Scan QR codes to open websites in Link Lock."
         CFBundleURLTypes:
           - CFBundleURLSchemes: [linklock]
             CFBundleURLName: com.gavinuhran.LinkLock

@@ -29,5 +29,9 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan QR codes to open websites in Link Lock.</string>
+	<key>UILaunchScreen</key>
+	<dict/>
 </dict>
 </plist>

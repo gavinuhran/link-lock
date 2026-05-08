@@ -14,13 +14,15 @@ enum SessionState: Equatable {
 struct Session {
     let id: UUID
     let originalURL: URL
+    let allowsNavigation: Bool
     var canonicalURL: URL?
     let startTime: Date
     var blockedAttempts: Int = 0
 
-    init(id: UUID = UUID(), originalURL: URL, startTime: Date = Date()) {
+    init(id: UUID = UUID(), originalURL: URL, allowsNavigation: Bool = false, startTime: Date = Date()) {
         self.id = id
         self.originalURL = originalURL
+        self.allowsNavigation = allowsNavigation
         self.startTime = startTime
     }
 }

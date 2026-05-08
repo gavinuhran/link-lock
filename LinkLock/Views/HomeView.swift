@@ -1,4 +1,5 @@
 import SwiftUI
+import VisionKit
 
 /// Entry point. Lets the user paste a URL and open a locked session.
 /// Also handles deep links from the Share Extension (linklock://open?url=...).
@@ -7,6 +8,9 @@ struct HomeView: View {
     @State private var urlText = ""
     @State private var navigateToBrowser = false
     @State private var targetURL: URL?
+    @State private var allowsNavigation = false
+    @State private var showQRScanner = false
+    @State private var showBlockedBanner = false
 
     // Passed from LinkLockApp when opened via Share Extension deep link.
     @Binding var pendingURL: URL?
@@ -14,6 +18,21 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Blocked banner
+                if showBlockedBanner {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                            .foregroundColor(.white)
+                        Text("Site blocked — session ended.")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.red)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 Spacer()
 
                 // MARK: Logo / Title
@@ -39,14 +58,23 @@ struct HomeView: View {
                         .keyboardType(.URL)
                         .onSubmit { tryOpen() }
 
-                    Button(action: tryOpen) {
-                        Label("Open", systemImage: "lock.open.fill")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
+                    HStack(spacing: 12) {
+                        Button(action: tryOpen) {
+                            Label("Open", systemImage: "lock.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(!isValidURL)
+
+                        Button { showQRScanner = true } label: {
+                            Image(systemName: "qrcode.viewfinder")
+                                .font(.title3)
+                                .padding(.horizontal, 4)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(!isValidURL)
                 }
                 .padding(.horizontal, 28)
 
@@ -62,7 +90,12 @@ struct HomeView: View {
             }
             .navigationDestination(isPresented: $navigateToBrowser) {
                 if let url = targetURL {
-                    BrowserView(url: url)
+                    BrowserView(url: url, allowsNavigation: allowsNavigation, onBlockTerminated: {
+                        withAnimation { showBlockedBanner = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation { showBlockedBanner = false }
+                        }
+                    })
                 }
             }
         }
@@ -70,9 +103,37 @@ struct HomeView: View {
         .onChange(of: pendingURL) { newURL in
             guard let url = newURL else { return }
             urlText = url.absoluteString
+            allowsNavigation = false
             targetURL = url
             navigateToBrowser = true
             pendingURL = nil
+        }
+        .sheet(isPresented: $showQRScanner) {
+            if DataScannerViewController.isSupported {
+                QRScannerView { url in
+                    showQRScanner = false
+                    urlText = url.absoluteString
+                    allowsNavigation = true
+                    targetURL = url
+                    navigateToBrowser = true
+                }
+                .ignoresSafeArea()
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "qrcode.viewfinder")
+                        .font(.system(size: 60))
+                        .foregroundColor(.secondary)
+                    Text("QR Scanning Unavailable")
+                        .font(.headline)
+                    Text("QR code scanning requires a physical device with a camera.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Dismiss") { showQRScanner = false }
+                        .buttonStyle(.bordered)
+                }
+                .padding(32)
+            }
         }
     }
 
@@ -94,6 +155,7 @@ struct HomeView: View {
 
     private func tryOpen() {
         guard let url = normalizedURL else { return }
+        allowsNavigation = false
         targetURL = url
         navigateToBrowser = true
     }
@@ -128,13 +190,6 @@ struct HistoryView: View {
             }
         }
         .navigationTitle("History")
-        .toolbar {
-            if !store.entries.isEmpty {
-                Button("Clear", role: .destructive) {
-                    store.clear()
-                }
-            }
-        }
     }
 }
 

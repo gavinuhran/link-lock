@@ -9,9 +9,6 @@ final class SessionManager: ObservableObject {
     // MARK: - Published State
 
     @Published var state: SessionState = .idle
-    @Published var showBlockedOverlay = false
-    @Published var lastBlockedURL: URL?
-    @Published var lastBlockReason: BlockReason?
 
     // MARK: - Internal Session Record
 
@@ -24,9 +21,11 @@ final class SessionManager: ObservableObject {
 
     // MARK: - State Transitions
 
-    /// Call when the user taps Open with a pasted URL.
-    func startSession(url: URL) {
-        let session = Session(originalURL: url)
+    private(set) var allowsNavigation: Bool = false
+
+    func startSession(url: URL, allowsNavigation: Bool = false) {
+        self.allowsNavigation = allowsNavigation
+        let session = Session(originalURL: url, allowsNavigation: allowsNavigation)
         currentSession = session
         state = .resolving(originalURL: url)
         logger.log(.sessionStart, sessionID: session.id, url: url)
@@ -41,18 +40,19 @@ final class SessionManager: ObservableObject {
         logger.log(.canonicalLocked, sessionID: currentSession?.id, url: url)
     }
 
+    /// Set to true when the session is terminated by a blocked navigation.
+    @Published var wasTerminated = false
+
     /// Call whenever a navigation or action is blocked.
+    /// In QR (free navigation) sessions: silently cancels the offending request, session continues.
+    /// In standard sessions: ends the session immediately.
     func recordBlocked(reason: BlockReason, url: URL?) {
         currentSession?.blockedAttempts += 1
-        lastBlockedURL = url
-        lastBlockReason = reason
-        showBlockedOverlay = true
         logger.log(.blocked, sessionID: currentSession?.id, url: url, reason: reason)
-    }
-
-    /// Call when the user taps "Stay" on the blocked overlay.
-    func dismissOverlay() {
-        showBlockedOverlay = false
+        if !allowsNavigation {
+            endSession()
+            wasTerminated = true
+        }
     }
 
     /// Call when the user taps "End Session" or navigates away.
@@ -72,9 +72,6 @@ final class SessionManager: ObservableObject {
 
         state = .ended
         currentSession = nil
-        showBlockedOverlay = false
-        lastBlockedURL = nil
-        lastBlockReason = nil
     }
 
     // MARK: - Computed Helpers

@@ -7,35 +7,36 @@ struct NavigationPolicyEngine {
 
     // MARK: - Main Decision
 
-    /// Evaluate a navigation action against the current session state.
     static func decide(
         navigationAction action: WKNavigationAction,
-        sessionState: SessionState
+        sessionState: SessionState,
+        allowsNavigation: Bool = false
     ) -> PolicyDecision {
         guard let url = action.request.url else {
             return .block(.nilURL)
         }
         return decide(url: url,
                       isMainFrame: action.targetFrame?.isMainFrame ?? true,
-                      sessionState: sessionState)
+                      sessionState: sessionState,
+                      allowsNavigation: allowsNavigation)
     }
 
     /// Overload accepting raw values — usable from unit tests without WKNavigationAction.
     static func decide(
         url: URL,
         isMainFrame: Bool,
-        sessionState: SessionState
+        sessionState: SessionState,
+        allowsNavigation: Bool = false
     ) -> PolicyDecision {
 
-        // Rule 1: Non-http(s) scheme — always block regardless of frame or state.
+        // Rule 1: Non-http(s) scheme — block external app schemes.
+        // Allow about: (about:blank, about:srcdoc) — used internally by pages for iframes.
         // Covers: mailto:, tel:, youtube://, fb://, itms-apps://, sms:, facetime:, etc.
-        guard url.isHTTPOrHTTPS else {
+        guard url.isHTTPOrHTTPS || url.schemeLowercased == "about" else {
             return .block(.nonHttpScheme)
         }
 
         // Rule 2: Subframe (iframe) navigation — allow all http(s).
-        // Subresource loads (images, CSS, JS) do not pass through this delegate.
-        // Iframe navigations do, but they're embedded content — allow them.
         guard isMainFrame else {
             return .allow
         }
@@ -46,13 +47,12 @@ struct NavigationPolicyEngine {
             return .allow
         }
 
-        // Rule 4: Locked phase — only the canonical URL (with any fragment) is allowed.
+        // Rule 4: Locked phase.
         if case .locked(let canonical) = sessionState {
-            // Fragment-only change: allow (same resource, different anchor).
-            if url.sameResource(as: canonical) {
-                return .allow
-            }
-            // Any other main-frame navigation: block.
+            // QR sessions allow any http(s) main-frame navigation.
+            if allowsNavigation { return .allow }
+            // Default: only the canonical URL (with any fragment) is allowed.
+            if url.sameResource(as: canonical) { return .allow }
             return .block(.mainFrameNavigation)
         }
 
@@ -65,7 +65,6 @@ struct NavigationPolicyEngine {
     /// Evaluate whether a committed navigation response should be allowed.
     /// Used to catch Content-Disposition: attachment download attempts.
     static func decideResponse(mimeType: String?, contentDisposition: String?) -> PolicyDecision {
-        // Block explicit download responses.
         if let disposition = contentDisposition,
            disposition.lowercased().hasPrefix("attachment") {
             return .block(.downloadBlocked)

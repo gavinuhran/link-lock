@@ -73,19 +73,24 @@ extension WebView {
             (function(cp, cq) {
                 if (window.__ll_spa_patched) return;
                 window.__ll_spa_patched = true;
+                var canonParams = new URLSearchParams(cq);
                 function sameResource(u) {
                     try {
-                        const n = new URL(u, location.href);
-                        const expectedSearch = cq ? ('?' + cq) : '';
-                        return n.pathname === cp && n.search === expectedSearch;
+                        var n = new URL(u, location.href);
+                        if (n.pathname !== cp) return false;
+                        var np = n.searchParams;
+                        for (var pair of canonParams) {
+                            if (np.get(pair[0]) !== pair[1]) return false;
+                        }
+                        return true;
                     } catch(e) { return true; }
                 }
-                const _push    = history.pushState.bind(history);
-                const _replace = history.replaceState.bind(history);
+                var _push    = history.pushState.bind(history);
+                var _replace = history.replaceState.bind(history);
                 history.pushState = function(s, t, u) {
                     if (u != null && !sameResource(String(u))) {
                         window.webkit.messageHandlers.spaBlocked.postMessage({url: String(u), type: 'pushState'});
-                        return; // swallow — do not call original
+                        return;
                     }
                     return _push(s, t, u);
                 };
@@ -114,7 +119,8 @@ extension WebView.Coordinator: WKNavigationDelegate {
     ) {
         let decision = NavigationPolicyEngine.decide(
             navigationAction: action,
-            sessionState: session.state
+            sessionState: session.state,
+            allowsNavigation: session.allowsNavigation
         )
         switch decision {
         case .allow:
@@ -157,7 +163,9 @@ extension WebView.Coordinator: WKNavigationDelegate {
             Task { @MainActor in
                 self.session.lockCanonical(url: url)
             }
-            injectSPAInterceptor(canonical: url)
+            if !session.allowsNavigation {
+                injectSPAInterceptor(canonical: url)
+            }
         }
     }
 
