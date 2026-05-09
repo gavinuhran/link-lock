@@ -57,6 +57,16 @@ struct HomeView: View {
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                         .onSubmit { tryOpen() }
+                        .overlay(alignment: .trailing) {
+                            if !urlText.isEmpty {
+                                Button { urlText = "" } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(Color(.systemGray3))
+                                        .font(.system(size: 17))
+                                }
+                                .padding(.trailing, 6)
+                            }
+                        }
 
                     HStack(spacing: 12) {
                         Button(action: tryOpen) {
@@ -98,6 +108,10 @@ struct HomeView: View {
                     })
                 }
             }
+        }
+        // Clear the field when returning from the browser.
+        .onChange(of: navigateToBrowser) { isPresented in
+            if !isPresented { urlText = "" }
         }
         // Handle deep links from Share Extension.
         .onChange(of: pendingURL) { newURL in
