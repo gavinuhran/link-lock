@@ -63,15 +63,30 @@ extension WebView {
             self.session = session
         }
 
+        private func presentPass(data: Data) {
+            guard let pass = try? PKPass(data: data),
+                  let vc = PKAddPassesViewController(pass: pass) else { return }
+            webView?.window?.rootViewController?.present(vc, animated: true)
+        }
+
         private func downloadAndPresentPass(url: URL) {
             URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-                guard let data,
-                      let pass = try? PKPass(data: data),
-                      let vc = PKAddPassesViewController(pass: pass) else { return }
-                DispatchQueue.main.async {
-                    self?.webView?.window?.rootViewController?.present(vc, animated: true)
-                }
+                guard let data else { return }
+                DispatchQueue.main.async { self?.presentPass(data: data) }
             }.resume()
+        }
+
+        // Salesforce (and some other providers) inline the entire pass as a
+        // data:application/vnd.apple.pkpass;base64,<…> URI rather than serving
+        // it from an HTTPS endpoint. Decode the payload directly — no request needed.
+        private func presentPassFromDataURL(_ url: URL) {
+            let prefix = "data:application/vnd.apple.pkpass;base64,"
+            let raw = url.absoluteString
+            guard raw.hasPrefix(prefix) else { return }
+            let encoded = String(raw.dropFirst(prefix.count))
+            let base64 = encoded.removingPercentEncoding ?? encoded
+            guard let data = Data(base64Encoded: base64, options: .ignoreUnknownCharacters) else { return }
+            presentPass(data: data)
         }
 
         // MARK: - SPA Injection
@@ -132,6 +147,15 @@ extension WebView.Coordinator: WKNavigationDelegate {
         decidePolicyFor action: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
+        // Intercept pkpass data URIs — Salesforce and some other providers inline
+        // the entire pass as base64 rather than serving it from an HTTPS endpoint.
+        if let url = action.request.url,
+           url.absoluteString.hasPrefix("data:application/vnd.apple.pkpass;base64,") {
+            decisionHandler(.cancel)
+            presentPassFromDataURL(url)
+            return
+        }
+
         let decision = NavigationPolicyEngine.decide(
             navigationAction: action,
             sessionState: session.state,
