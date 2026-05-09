@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import PassKit
 
 // MARK: - WebView (UIViewRepresentable)
 
@@ -54,9 +55,23 @@ extension WebView {
 
         weak var webView: WKWebView?
         private let session: SessionManager
+        // True when we provisionally allowed a non-canonical navigation to reach
+        // the response phase so we can inspect its MIME type for pkpass detection.
+        private var awaitingPassKitCheck = false
 
         init(session: SessionManager) {
             self.session = session
+        }
+
+        private func downloadAndPresentPass(url: URL) {
+            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                guard let data,
+                      let pass = try? PKPass(data: data),
+                      let vc = PKAddPassesViewController(pass: pass) else { return }
+                DispatchQueue.main.async {
+                    self?.webView?.window?.rootViewController?.present(vc, animated: true)
+                }
+            }.resume()
         }
 
         // MARK: - SPA Injection
@@ -126,9 +141,16 @@ extension WebView.Coordinator: WKNavigationDelegate {
         case .allow:
             decisionHandler(.allow)
         case .block(let reason):
-            decisionHandler(.cancel)
-            Task { @MainActor in
-                self.session.recordBlocked(reason: reason, url: action.request.url)
+            if case .mainFrameNavigation = reason {
+                // Let it reach the response phase so we can inspect the MIME type.
+                // decideResponse will cancel it (and end the session) if it's not a pkpass.
+                awaitingPassKitCheck = true
+                decisionHandler(.allow)
+            } else {
+                decisionHandler(.cancel)
+                Task { @MainActor in
+                    self.session.recordBlocked(reason: reason, url: action.request.url)
+                }
             }
         }
     }
@@ -138,6 +160,23 @@ extension WebView.Coordinator: WKNavigationDelegate {
         decidePolicyFor response: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
     ) {
+        // A non-canonical navigation was provisionally allowed through to here.
+        // If it's a pkpass, hand it to PassKit; otherwise block it as normal.
+        if awaitingPassKitCheck {
+            awaitingPassKitCheck = false
+            if response.response.mimeType == "application/vnd.apple.pkpass",
+               let url = response.response.url {
+                decisionHandler(.cancel)
+                downloadAndPresentPass(url: url)
+                return
+            }
+            decisionHandler(.cancel)
+            Task { @MainActor in
+                self.session.recordBlocked(reason: .mainFrameNavigation, url: response.response.url)
+            }
+            return
+        }
+
         let httpResponse = response.response as? HTTPURLResponse
         let contentDisposition = httpResponse?.value(forHTTPHeaderField: "Content-Disposition")
         let mimeType = response.response.mimeType
